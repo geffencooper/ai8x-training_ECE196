@@ -1156,7 +1156,7 @@ def evaluate_model(model, criterion, test_loader, loggers, activations_collector
         shap_numpy = [np.swapaxes(np.swapaxes(s, 1, -1), 1, 2) for s in shap_values]
         test_numpy = np.swapaxes(np.swapaxes(test_images.numpy(), 1, -1), 1, 2)
         # Plot the feature attributions
-        shap.image_plot(shap_numpy, -test_numpy)
+        shap.image_plot(shap_numpy, test_numpy)
 
     if args.quantize_eval:
         checkpoint_name = 'quantized'

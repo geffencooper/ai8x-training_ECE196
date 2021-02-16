@@ -49,6 +49,9 @@ def geffen_faces_get_datasets(data, load_train=True, load_test=True):
             transforms.Resize((64, 64)),
             transforms.Grayscale(num_output_channels=1),
             transforms.ToTensor(),
+            #torchvision.transforms.RandomHorizontalFlip(),
+            #torchvision.transforms.RandomRotation(20, resample=Image.BILINEAR),
+            #torchvision.transforms.RandomCrop(64),
             ai8x.normalize(args=args)
         ])
 
@@ -76,11 +79,60 @@ def geffen_faces_get_datasets(data, load_train=True, load_test=True):
     return train_dataset, test_dataset
 
 
+def geffnet_faces_get_datasets(data, load_train=True, load_test=True):
+   
+    (data_dir, args) = data
+    
+    training_data_path = "/home/geffen/Documents/Source/AI/ai8x-training/data/face_classifier/train"
+    test_data_path = "/home/geffen/Documents/Source/AI/ai8x-training/data/face_classifier/test"
+
+    if load_train:
+        train_transform = transforms.Compose([
+            transforms.Resize((128, 128)),
+            transforms.Grayscale(num_output_channels=1),
+            transforms.ToTensor(),
+            torchvision.transforms.RandomHorizontalFlip(),
+            #torchvision.transforms.RandomRotation(20, resample=Image.BILINEAR),
+            torchvision.transforms.RandomAffine(degrees=5,scale=(0.85,1.15),translate=(0.15,0.15)),
+            #torchvision.transforms.RandomCrop(64),
+            ai8x.normalize(args=args)
+        ])
+
+        train_dataset = torchvision.datasets.ImageFolder(root=training_data_path,
+                                                         transform=train_transform)
+        print(train_dataset.classes)
+    else:
+        train_dataset = None
+
+    # Loading and normalizing test dataset
+    if load_test:
+        test_transform = transforms.Compose([
+            transforms.Resize((128, 128)),
+            transforms.Grayscale(num_output_channels=1),
+            transforms.ToTensor(),
+            ai8x.normalize(args=args)
+        ])
+
+        test_dataset = torchvision.datasets.ImageFolder(root=test_data_path,
+                                                        transform=test_transform)
+
+    else:
+        test_dataset = None
+
+    return train_dataset, test_dataset
+
+
 datasets = [
     {
         'name': 'GEFFEN_FACES',
         'input': (1, 64, 64),
         'output': ('face', 'no_face'),
         'loader': geffen_faces_get_datasets,
+    },
+    {
+        'name': 'geffnet_faces',
+        'input': (1, 128, 128),
+        'output': ('face', 'no_face'),
+        'loader': geffnet_faces_get_datasets,
     }
 ]
