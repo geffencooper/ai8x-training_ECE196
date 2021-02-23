@@ -38,17 +38,18 @@ import os
 
 import ai8x
 
-
+# dataset of faces including a csv of 4 facial landmarks
+# this requires custom __len__ and __getitem__ functions
 class FacePointsDataset(Dataset):
     def __init__(self, csv_file, root_dir, transform=None):
         self.landmarks_frame = pd.read_csv(csv_file)
-        print(self.landmarks_frame)
-        print(len(self.landmarks_frame))
+        #print(self.landmarks_frame)
+        #print(len(self.landmarks_frame))
         self.root_dir = root_dir
         self.transform = transform
         
     def __len__(self):
-        print(self.landmarks_frame)
+        #print(self.landmarks_frame)
         return len(self.landmarks_frame)
     
     def __getitem__(self, idx):
@@ -73,7 +74,7 @@ class FacePointsDataset(Dataset):
         return image, landmarks
     
 
-def geffen_faces_get_datasets(data, load_train=True, load_test=True):
+def face_points_get_datasets(data, load_train=True, load_test=True):
    
     (data_dir, args) = data
     
@@ -102,16 +103,18 @@ def geffen_faces_get_datasets(data, load_train=True, load_test=True):
     return train_dataset, test_dataset
 
 
+# dataset of faces including a bounding box (x,y,w,h)
+# this requires custom __len__ and __getitem__ functions
 class BBDataset(Dataset):
     def __init__(self, csv_file, root_dir, transform=None):
         self.bb_frame = pd.read_csv(csv_file)
-        print(self.bb_frame)
-        print(len(self.bb_frame))
+        #print(self.bb_frame)
+        #print(len(self.bb_frame))
         self.root_dir = root_dir
         self.transform = transform
         
     def __len__(self):
-        print(self.bb_frame)
+        #print(self.bb_frame)
         return len(self.bb_frame)
     
     def __getitem__(self, idx):
@@ -121,12 +124,12 @@ class BBDataset(Dataset):
         img_name = os.path.join(self.root_dir,self.bb_frame.iloc[idx, 0])
         image = io.imread(img_name)
         bb = self.bb_frame.iloc[idx,1:] # don't include image name
-        bb = np.array(bb).astype('float')/2
+        bb = np.array(bb).astype('float')
         #landmarks = np.array([landmarks])
         #landmarks = landmarks.astype('float').reshape(-1, 1) # change to coordinate columns
         #landmarks = np.squeeze(landmarks, axis = 1)
         
-        image = torch.Tensor(image).float()
+        image = torch.Tensor(image).float()/255
         image = image.unsqueeze(0)
         bb = torch.from_numpy(bb).float()
         
@@ -136,16 +139,16 @@ class BBDataset(Dataset):
         return image, bb
   
 
-def geffen_bb_get_datasets(data, load_train=True, load_test=True):
+def bb_get_datasets(data, load_train=True, load_test=True):
     (data_dir, args) = data
     
-    train_data_dir = "/home/geffen/Documents/Source/AI/ai8x-training/data/face_box/train"
-    test_data_dir = "/home/geffen/Documents/Source/AI/ai8x-training/data/face_box/test"
-    test_csv_file = "/home/geffen/Documents/Source/AI/ai8x-training/data/face_box/test/test_bb.csv"
-    train_csv_file = "/home/geffen/Documents/Source/AI/ai8x-training/data/face_box/train/train_bb.csv"
+    train_data_dir = "/home/geffen/Desktop/Face_Detector/assemble_face_dataset_utils/face_box_dataset/train"
+    test_data_dir = "/home/geffen/Desktop/Face_Detector/assemble_face_dataset_utils/face_box_dataset/test"
+    test_csv_file = "/home/geffen/Desktop/Face_Detector/assemble_face_dataset_utils/face_box_dataset/test/bb.csv"
+    train_csv_file = "/home/geffen/Desktop/Face_Detector/assemble_face_dataset_utils/face_box_dataset/train/bb.csv"
     
     transform = transforms.Compose([
-        transforms.Resize((64, 64)),
+        transforms.Resize((80, 80)),
         ai8x.normalize(args=args)
     ])
 
@@ -168,17 +171,17 @@ def geffen_bb_get_datasets(data, load_train=True, load_test=True):
 
 datasets = [
     {
-        'name': 'geffen_points',
-        'input': (1, 64, 64),
+        'name': 'face_points',
+        'input': (1, 90, 90),
         'output': ('coords'),
         'regression': True,
-        'loader': geffen_faces_get_datasets,
+        'loader': face_points_get_datasets,
     },
     {
-        'name': 'geffen_bb',
-        'input': (1, 64, 64),
+        'name': 'bb',
+        'input': (1, 80, 80),
         'output': ('coords'),
         'regression': True,
-        'loader': geffen_bb_get_datasets,
+        'loader': bb_get_datasets,
     }
 ]
