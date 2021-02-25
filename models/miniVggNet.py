@@ -37,19 +37,18 @@ class MiniVggNet(nn.Module):
         self.conv5 = ai8x.FusedMaxPoolConv2dReLU(16,32, 3, padding=1, bias=False,pool_size=2, pool_stride=2, **kwargs)
         self.conv6 = ai8x.FusedConv2dReLU(32, 32, 3, padding=1, bias=False, **kwargs)
         
-        # 32x20x20 --> 64x10x10 (padding by 1 so same dimension)
-        self.conv7 = ai8x.FusedMaxPoolConv2dReLU(32, 64, 3, padding=1, bias=False, pool_size=2, pool_stride=2,**kwargs)
+        # 32x20x20 --> 64x12x12 (padding by 2 so increase dimension)
+        self.conv7 = ai8x.FusedMaxPoolConv2dReLU(32, 64, 3, padding=2, bias=False, pool_size=2, pool_stride=2,**kwargs)
         self.conv8 = ai8x.FusedConv2dReLU(64, 64, 3, padding=1, bias=False, **kwargs)
         
-        # 64x10x10 --> 64x6x6 (padding by 2 so increase dimension)
-        self.conv9 = ai8x.FusedMaxPoolConv2dReLU(64, 64, 3, padding=2, bias=False, pool_size=2, pool_stride=2,**kwargs)
+        # 64x12x12 --> 64x6x6 (padding by 1 so same dimension)
+        self.conv9 = ai8x.FusedMaxPoolConv2dReLU(64, 64, 3, padding=1, bias=False, pool_size=2, pool_stride=2,**kwargs)
         
         # 64x6x6 --> 64x3x3 (passing by 1 so same dimension)
         self.conv10 = ai8x.FusedMaxPoolConv2dReLU(64, 64, 3, padding=1, bias=False, pool_size=2, pool_stride=2,**kwargs)
-        self.conv11 = ai8x.FusedConv2dReLU(64,64, 3, padding=1, bias=False, **kwargs)
         
         # flatten to fully connected layer
-        self.fc1 = ai8x.Linear(64*3*3, 10, bias=True, **kwargs)
+        self.fc1 = ai8x.FusedLinearReLU(64*3*3, 10, bias=True, **kwargs)
         self.fc2 = ai8x.Linear(10, 2, bias=True, wide=True, **kwargs)
 
         for m in self.modules():
@@ -68,7 +67,6 @@ class MiniVggNet(nn.Module):
         x = self.conv8(x)
         x = self.conv9(x)
         x = self.conv10(x)
-        x = self.conv11(x)
         x = x.view(x.size(0), -1)
         x = self.fc1(x)
         x= self.fc2(x)
@@ -100,6 +98,8 @@ class MiniVggNet_bb(nn.Module):
             
         # add a fully connected layer for bounding box detection after the conv10
         self.fc3 = ai8x.Linear(64*3*3, 4, bias=True, wide=True, **kwargs)
+        #nn.init.kaiming_normal_(self.fc3 .weight, mode='fan_out')
+        #self.feature_extractor.fc2 = ai8x.Linear(64*3*3, 4, bias=True, wide=True, **kwargs)
         
         #print(self.feature_extractor)
        
@@ -116,7 +116,6 @@ class MiniVggNet_bb(nn.Module):
         x = self.feature_extractor.conv8(x)
         x = self.feature_extractor.conv9(x)
         x = self.feature_extractor.conv10(x)
-        x = self.feature_extractor.conv11(x)
         x = x.view(x.size(0), -1)
         
         # output layers
@@ -126,6 +125,7 @@ class MiniVggNet_bb(nn.Module):
         x2 = self.fc3(x) # bounding box
 
         return x1,x2
+        #return x1
     
 def mini_vgg_net_bb(pretrained=False, **kwargs):
     assert not pretrained

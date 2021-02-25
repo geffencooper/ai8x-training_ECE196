@@ -128,6 +128,43 @@ weight_sum = None
 weight_stddev = None
 weight_mean = None
 
+def iou(outputs, labels):
+    #print("labels: ", labels.data)
+    #print(labels.size())
+    
+    # get the tlc coordinates and brc coordinates
+    x_tlc_out = outputs[:,0].data
+    y_tlc_out = outputs[:,1].data
+    x_tlc_gt = labels[:,0].data
+    y_tlc_gt = labels[:,1].data
+    
+    x_brc_out = outputs[:,0].data + outputs[:,2]
+    y_brc_out = outputs[:,1].data + outputs[:,3]
+    x_brc_gt = labels[:,0].data + labels[:,2]
+    y_brc_gt = labels[:,1].data + labels[:,3]
+    #print(torch.max(x_tlc_out, x_tlc_gt))
+    #print("guess: ",x_tlc_out[0],y_tlc_out[0])
+    #print("gt: ",x_tlc_gt[0], y_tlc_gt[0])
+    # find the max
+    x_tlc = torch.max(x_tlc_out, x_tlc_gt)
+    y_tlc = torch.max(y_tlc_out, y_tlc_gt)
+    x_brc = torch.min(x_brc_out, x_brc_gt)
+    y_brc = torch.min(y_brc_out, y_brc_gt)
+    
+    inter_area = torch.max(torch.zeros_like(x_brc), x_brc-x_tlc + 1)*torch.max(torch.zeros_like(y_brc), y_brc-y_tlc + 1)+0.0000001
+    out_area = (x_brc_out-x_tlc_out+1)*(y_brc_out-y_tlc_out+1)
+    label_area = (x_brc_gt-x_tlc_gt+1)*(y_brc_gt-y_tlc_gt+1)
+    iou = inter_area / (label_area+out_area-inter_area)
+    #print(out_area)
+    #print(1-iou[0])
+    # print(outputs[0])
+    # print(labels[0])
+    # print(inter_area[0])
+    # print(out_area[0])
+    # print(label_area[0])
+    # print(iou[0])
+    # print()
+    return -torch.log(iou)
 
 def main():
     """main"""
@@ -822,6 +859,9 @@ def _validate(data_loader, model, criterion, loggers, args, epoch=-1, tflogger=N
             inputs, target = inputs.to(args.device), target.to(args.device)
             # compute output from model
             out1,out2 = model(inputs)
+           
+            #print(out2)
+            #print(target)
 
             if args.generate_sample is not None:
                 sample.generate(args.generate_sample, inputs, target, out2, args.dataset, False)
@@ -835,6 +875,7 @@ def _validate(data_loader, model, criterion, loggers, args, epoch=-1, tflogger=N
             if not args.earlyexit_thresholds:
                 # compute loss
                 loss = criterion(out2, target)
+                #loss = iou(out2,target).sum()
                 # measure accuracy and record loss
                 losses['objective_loss'].add(loss.item())
                 classerr.add(out2.data, target)
