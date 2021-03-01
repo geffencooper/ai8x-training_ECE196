@@ -128,8 +128,10 @@ weight_sum = None
 weight_stddev = None
 weight_mean = None
 
+
 def iou(outputs, labels):
-    #print("labels: ", labels.data)
+    #print("labels: ", labels.data[0])
+    #print("outputs: ", outputs.data[0])
     #print(labels.size())
     
     # get the tlc coordinates and brc coordinates
@@ -142,9 +144,7 @@ def iou(outputs, labels):
     y_brc_out = outputs[:,1].data + outputs[:,3]
     x_brc_gt = labels[:,0].data + labels[:,2]
     y_brc_gt = labels[:,1].data + labels[:,3]
-    #print(torch.max(x_tlc_out, x_tlc_gt))
-    #print("guess: ",x_tlc_out[0],y_tlc_out[0])
-    #print("gt: ",x_tlc_gt[0], y_tlc_gt[0])
+    
     # find the max
     x_tlc = torch.max(x_tlc_out, x_tlc_gt)
     y_tlc = torch.max(y_tlc_out, y_tlc_gt)
@@ -155,16 +155,11 @@ def iou(outputs, labels):
     out_area = (x_brc_out-x_tlc_out+1)*(y_brc_out-y_tlc_out+1)
     label_area = (x_brc_gt-x_tlc_gt+1)*(y_brc_gt-y_tlc_gt+1)
     iou = inter_area / (label_area+out_area-inter_area)
-    #print(out_area)
-    #print(1-iou[0])
-    # print(outputs[0])
-    # print(labels[0])
-    # print(inter_area[0])
-    # print(out_area[0])
-    # print(label_area[0])
-    # print(iou[0])
+    
+    #print(iou[0])
+    l1 = nn.L1Loss()
     # print()
-    return -torch.log(iou)
+    return -torch.log(iou) + l1(outputs,labels)
 
 def main():
     """main"""
@@ -637,21 +632,22 @@ def train(train_loader, model, criterion, optimizer, epoch,
             compression_scheduler.on_minibatch_begin(epoch, train_step, steps_per_epoch, optimizer)
 
         if not hasattr(args, 'kd_policy') or args.kd_policy is None:
-            out1,out2 = model(inputs)
+            output = model(inputs)
         else:
-            out1,out2 = args.kd_policy.forward(inputs)
+            output = args.kd_policy.forward(inputs)
 
         if not args.earlyexit_lossweights:
-            loss = criterion(out2, target)
+            #loss = criterion(output, target)
+            loss = iou(output,target).sum().mean()
             # Measure accuracy
-            classerr.add(out2.data, target)
+            classerr.add(output.data, target)
             if not args.regression:
                 acc_stats.append([classerr.value(1), classerr.value(min(args.num_classes, 5))])
             else:
                 acc_stats.append([classerr.value()])
         else:
             # Measure accuracy and record loss
-            loss = earlyexit_loss(out2, target, criterion, args)
+            loss = earlyexit_loss(output, target, criterion, args)
         # Record loss
         losses[OBJECTIVE_LOSS_KEY].add(loss.item())
 
@@ -858,31 +854,30 @@ def _validate(data_loader, model, criterion, loggers, args, epoch=-1, tflogger=N
         with torch.no_grad():
             inputs, target = inputs.to(args.device), target.to(args.device)
             # compute output from model
-            out1,out2 = model(inputs)
-           
-            #print(out2)
+            output = model(inputs)
+            #print(output)
             #print(target)
 
             if args.generate_sample is not None:
-                sample.generate(args.generate_sample, inputs, target, out2, args.dataset, False)
+                sample.generate(args.generate_sample, inputs, target, output, args.dataset, False)
                 return .0, .0, .0
 
             if args.csv_prefix is not None:
                 save_tensor(inputs, f_x)
-                save_tensor(out2, f_ypred, regression=args.regression)
+                save_tensor(output, f_ypred, regression=args.regression)
                 save_tensor(target, f_ytrue, regression=args.regression)
 
             if not args.earlyexit_thresholds:
                 # compute loss
-                loss = criterion(out2, target)
-                #loss = iou(out2,target).sum()
+                #loss = criterion(output, target)
+                loss = iou(output,target).sum().mean()
                 # measure accuracy and record loss
                 losses['objective_loss'].add(loss.item())
-                classerr.add(out2.data, target)
+                classerr.add(output.data, target)
                 if args.display_confusion:
-                    confusion.add(out2.data, target)
+                    confusion.add(output.data, target)
             else:
-                earlyexit_validate_loss(out2, target, criterion, args)
+                earlyexit_validate_loss(output, target, criterion, args)
 
             # measure elapsed time
             batch_time.add(time.time() - end)
@@ -891,8 +886,8 @@ def _validate(data_loader, model, criterion, loggers, args, epoch=-1, tflogger=N
             steps_completed = (validation_step+1)
             if steps_completed % args.print_freq == 0 or steps_completed == total_steps:
                 if args.display_prcurves and tflogger is not None:
-                    class_probs_batch = [torch.nn.functional.softmax(el, dim=0) for el in out2]
-                    _, class_preds_batch = torch.max(out2, 1)
+                    class_probs_batch = [torch.nn.functional.softmax(el, dim=0) for el in output]
+                    _, class_preds_batch = torch.max(output, 1)
                     class_probs.append(class_probs_batch)
                     class_preds.append(class_preds_batch)
 
@@ -955,7 +950,7 @@ def _validate(data_loader, model, criterion, loggers, args, epoch=-1, tflogger=N
                         return data[perm][:n], labels[perm][:n], features[perm][:n]
 
                     # Select up to 100 random images and their target indices
-                    images, labels, features = select_n_random(inputs, target, out2,
+                    images, labels, features = select_n_random(inputs, target, output,
                                                                n=min(100, len(inputs)))
 
                     # Get the class labels for each image
