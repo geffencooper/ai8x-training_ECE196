@@ -89,16 +89,21 @@ class MiniVggNet_bb(nn.Module):
         
         # load the pretrained model
         self.feature_extractor = MiniVggNet(**kwargs)
-        model, compression_scheduler, optimizer, start_epoch = apputils.load_checkpoint(self.feature_extractor, "../ai8x-synthesis/trained/mini_vgg_net_q.pth.tar")
+        model, compression_scheduler, optimizer, start_epoch = apputils.load_checkpoint(self.feature_extractor, "../ai8x-synthesis/trained/mini_vgg_net.pth.tar")
         self.feature_extractor = model
        
         # freeze the weights
         for param in self.feature_extractor.parameters():
             param.requires_grad = False
             
+        # retrain the last layer to detect a bounding box
+        self.feature_extractor.fc1 = ai8x.Linear(64*3*3, 4, bias=False, wide=True, **kwargs)
+            
         # add a fully connected layer for bounding box detection after the conv10
-        self.fc3 = ai8x.Linear(64*3*3, 4, bias=True, wide=True, **kwargs)
-        #nn.init.kaiming_normal_(self.fc3 .weight, mode='fan_out')
+        #self.fc3 = ai8x.Linear(64*3*3, 4, bias=True, wide=True, **kwargs)
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform(m.weight)
         #self.feature_extractor.fc2 = ai8x.Linear(64*3*3, 4, bias=True, wide=True, **kwargs)
         
         #print(self.feature_extractor)
@@ -119,13 +124,13 @@ class MiniVggNet_bb(nn.Module):
         x = x.view(x.size(0), -1)
         
         # output layers
-        x1 = self.feature_extractor.fc1(x)
-        x1 = self.feature_extractor.fc2(x1) # binary classifier
+        x1 = self.feature_extractor.fc1(x) # only output a bb for now
+        #x1 = self.feature_extractor.fc2(x1) # binary classifier
         
-        x2 = self.fc3(x) # bounding box
+        #x2 = self.fc3(x) # bounding box
 
-        return x1,x2
-        #return x1
+        #return x1,x2
+        return x1
     
 def mini_vgg_net_bb(pretrained=False, **kwargs):
     assert not pretrained

@@ -129,6 +129,38 @@ weight_stddev = None
 weight_mean = None
 
 
+def iou(outputs, labels):
+    #print("labels: ", labels.data[0])
+    #print("outputs: ", outputs.data[0])
+    #print(labels.size())
+    
+    # get the tlc coordinates and brc coordinates
+    x_tlc_out = outputs[:,0].data
+    y_tlc_out = outputs[:,1].data
+    x_tlc_gt = labels[:,0].data
+    y_tlc_gt = labels[:,1].data
+    
+    x_brc_out = outputs[:,0].data + outputs[:,2]
+    y_brc_out = outputs[:,1].data + outputs[:,3]
+    x_brc_gt = labels[:,0].data + labels[:,2]
+    y_brc_gt = labels[:,1].data + labels[:,3]
+    
+    # find the max
+    x_tlc = torch.max(x_tlc_out, x_tlc_gt)
+    y_tlc = torch.max(y_tlc_out, y_tlc_gt)
+    x_brc = torch.min(x_brc_out, x_brc_gt)
+    y_brc = torch.min(y_brc_out, y_brc_gt)
+    
+    inter_area = torch.max(torch.zeros_like(x_brc), x_brc-x_tlc + 1)*torch.max(torch.zeros_like(y_brc), y_brc-y_tlc + 1)+0.0000001
+    out_area = (x_brc_out-x_tlc_out+1)*(y_brc_out-y_tlc_out+1)
+    label_area = (x_brc_gt-x_tlc_gt+1)*(y_brc_gt-y_tlc_gt+1)
+    iou = inter_area / (label_area+out_area-inter_area)
+    
+    #print(iou[0])
+    l1 = nn.L1Loss()
+    # print()
+    return -torch.log(iou) + l1(outputs,labels)
+
 def main():
     """main"""
     script_dir = os.path.dirname(__file__)
@@ -605,7 +637,8 @@ def train(train_loader, model, criterion, optimizer, epoch,
             output = args.kd_policy.forward(inputs)
 
         if not args.earlyexit_lossweights:
-            loss = criterion(output, target)
+            #loss = criterion(output, target)
+            loss = iou(output,target).sum().mean()
             # Measure accuracy
             classerr.add(output.data, target)
             if not args.regression:
@@ -822,6 +855,8 @@ def _validate(data_loader, model, criterion, loggers, args, epoch=-1, tflogger=N
             inputs, target = inputs.to(args.device), target.to(args.device)
             # compute output from model
             output = model(inputs)
+            print(output)
+            print(target)
 
             if args.generate_sample is not None:
                 sample.generate(args.generate_sample, inputs, target, output, args.dataset, False)
@@ -834,7 +869,8 @@ def _validate(data_loader, model, criterion, loggers, args, epoch=-1, tflogger=N
 
             if not args.earlyexit_thresholds:
                 # compute loss
-                loss = criterion(output, target)
+                #loss = criterion(output, target)
+                loss = iou(output,target).sum().mean()
                 # measure accuracy and record loss
                 losses['objective_loss'].add(loss.item())
                 classerr.add(output.data, target)
